@@ -33,8 +33,8 @@ def consumer(addresses: List[str], subject: str, template_name: str, data: Dict[
             message = EmailMultiAlternatives(subject, '', None, addresses)      # Create email message
             message.attach_alternative(content, 'text/html')                    # Add HTML content to email message
             message.send()                                                      # Send email message
-        except Exception:
-            logger.error('[Email] Error during email message sending')
+        except Exception as e:
+            logger.error(f'[Email] Error during email message sending: {e}')
 
 
 def user_invitation(user: Any) -> None:
