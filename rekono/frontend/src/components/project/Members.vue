@@ -9,7 +9,7 @@
         {{ row.item.last_login !== null ? row.item.last_login.split('.', 1)[0].replace('T', ' ') : '' }}
       </template>
       <template #cell(actions)="row">
-        <b-button variant="outline" @click="selectedUser = row.item" v-b-modal.delete-member-modal v-b-tooltip.hover title="Remove Member" :disabled="row.item.id === $store.state.user">
+        <b-button variant="outline" @click="selectedUser = row.item" v-b-modal.delete-member-modal v-b-tooltip.hover title="Remove Member" :disabled="row.item.id === $store.state.user || row.item.role.toLowerCase() === 'admin'">
           <b-icon variant="danger" icon="trash-fill"/>
         </b-button>
       </template>
@@ -18,7 +18,7 @@
     <deletion id="delete-member-modal" title="Delete Member" @deletion="deleteMember" @clean="selectedUser = null" v-if="selectedUser !== null">
       <span><strong>{{ selectedUser.username }}</strong> member</span>
     </deletion>
-    <project-member id="add-member-modal" :projectId="$route.params.id" @confirm="confirm"/>
+    <project-member id="add-member-modal" :projectId="$route.params.id" :currentRole="currentRole" @confirm="confirm"/>
   </div>
 </template>
 
@@ -32,7 +32,8 @@ export default {
   name: 'projectMembersPage',
   mixins: [RekonoApi],
   props: {
-    project: Object
+    project: Object,
+    currentRole: String 
   },
   data () {
     this.fetchData()
@@ -48,7 +49,8 @@ export default {
         { key: 'actions', sortable: false }
       ],
       selectedUser: null,
-      filters: []
+      filters: [],
+
     }
   },
   components: {
@@ -68,6 +70,7 @@ export default {
     fetchData (params = {}) {
       params.project = this.$route.params.id
       params.o = 'username'
+      params.role_project = this.currentRole;
       return this.getOnePage('/api/users/', params)
         .then(response => {
           this.data = response.data.results
