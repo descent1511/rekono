@@ -26,11 +26,11 @@
           </template>
           <findings class="mt-3" :project="currentProject"/>
         </b-tab>
-        <b-tab lazy :active="path.includes('members')" @click="changeSubTab('members')" title-link-class="text-secondary" v-if="$store.state.role === 'Admin'">
+        <b-tab lazy :active="path.includes('members')" @click="changeSubTab('members')" title-link-class="text-secondary" v-if="$store.state.role === 'Admin' || currentRole === 'admin'">
           <template #title>
             <b-icon icon="people-fill"/> Members
           </template>
-          <members class="mt-3" :project="currentProject"/>
+          <members class="mt-3" :project="currentProject" :current-role="currentRole" />
         </b-tab>
       </b-tabs>
       <not-found back="/projects" v-if="!isFound"/>
@@ -57,7 +57,8 @@ export default {
     return {
       path: window.location.hash,
       currentProject: this.project ? this.project : this.fetchProject(),
-      isFound: true
+      isFound: true,
+      currentRole: this.fetchRole(), 
     }
   },
   components: {
@@ -78,9 +79,19 @@ export default {
     },
     fetchProject () {
       this.get(`/api/projects/${this.$route.params.id}/`)
-        .then(response => this.currentProject = response.data)
+        .then(response => {this.currentProject = response.data;})
         .catch(error => this.isFound = (error.response.status !== 404))
-    }
+    },
+    fetchRole () {
+    const projectId = this.$route.params.id;
+    this.get(`/api/projects/${projectId}/member/role`)
+      .then(response => {
+        this.currentRole = response.data.role; 
+      })
+      .catch(() => {
+        this.currentRole = null; 
+      });
+  }
   }
 }
 </script>
