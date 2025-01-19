@@ -26,7 +26,21 @@ from users.serializers import (ChangeUserPasswordSerializer,
 
 logger = logging.getLogger()                                                    # Rekono logger
 
+class IsAdminOrProjectAdmin(BasePermission):
+    """
+    Custom permission to grant access if the user is an admin 
+    or has an 'admin' role in the specified project filter.
+    """
 
+    def has_permission(self, request, view):
+        if request.user and request.user.is_staff:
+            return True
+
+        project_filter = request.query_params.get('role_project') 
+        if project_filter == 'admin':
+            return True
+
+        return False
 class UserAdminViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin, DestroyModelMixin):
     '''User administration ViewSet that includes: get, retrieve, invite, role change, enable and disable features.'''
 
@@ -36,7 +50,7 @@ class UserAdminViewSet(GenericViewSet, ListModelMixin, RetrieveModelMixin, Destr
     # Fields used to search tasks
     search_fields = ['username', 'first_name', 'last_name', 'email']
     # Required to include the IsAdmin to the base authorization classes and remove unneeded ProjectMemberPermission
-    permission_classes = [IsAuthenticated, DjangoModelPermissions, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdminOrProjectAdmin]
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         '''Disable user.

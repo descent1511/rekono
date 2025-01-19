@@ -13,7 +13,7 @@ from targets.serializers import TargetSerializer
 from users.models import User
 from users.serializers import SimplyUserSerializer
 
-from projects.models import Project
+from projects.models import Project, ProjectMembership
 
 logger = logging.getLogger()                                                    # Rekono logger
 
@@ -49,28 +49,44 @@ class ProjectSerializer(TaggitSerializer, serializers.ModelSerializer):
             Project: Created instance
         '''
         project = super().create(validated_data)                                # Create project
+        ProjectMembership.objects.create(
+            project=project,
+            user=validated_data.get('owner'),
+            role='admin'
+        )
         project.members.add(validated_data.get('owner'))                        # Add project owner also in member list
         return project
-
-
 class ProjectMemberSerializer(serializers.Serializer):
-    '''Serializer to add new member to a project via API.'''
+    '''Serializer to add or update a member in a project with a specific role.'''
 
-    user = serializers.IntegerField(required=True)                              # User Id to add to the project members
+    user = serializers.IntegerField(required=True)  # User ID to add or update
+    role = serializers.ChoiceField(
+        choices=ProjectMembership.ROLE_CHOICES, required=True
+    )  # Role for the user in the project
 
-    @transaction.atomic()
+    @transaction.atomic
     def update(self, instance: Project, validated_data: Dict[str, Any]) -> Project:
-        '''Update instance from validated data.
+        '''
+        Add or update a user as a member of the project.
 
         Args:
-            instance (Project): Instance to update
+            instance (Project): Project instance to update
             validated_data (Dict[str, Any]): Validated data
 
         Returns:
-            Project: Updated instance
+            Project: Updated project instance
         '''
+        role = validated_data.get('role')
         user = User.objects.get(pk=validated_data.get('user'), is_active=True)  # Get active user from user Id
         instance.members.add(user)                                              # Add user as project member
+        # Check if the user is already a member
+        membership, created = ProjectMembership.objects.update_or_create(
+            project=instance,
+            user=user,
+            defaults={'role': role}
+        )
+
+
         return instance
 
 

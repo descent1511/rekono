@@ -1,8 +1,9 @@
+import logging
 from api.views import CreateWithUserViewSet, GetViewSet
 from defectdojo.exceptions import DefectDojoException
 from drf_spectacular.utils import extend_schema
 from projects.filters import ProjectFilter
-from projects.models import Project
+from projects.models import Project,ProjectMembership
 from projects.serializers import (DefectDojoIntegrationSerializer,
                                   DefectDojoSyncSerializer,
                                   ProjectMemberSerializer, ProjectSerializer)
@@ -15,7 +16,7 @@ from rest_framework.viewsets import ModelViewSet
 from users.models import User
 
 # Create your views here.
-
+logger = logging.getLogger()  
 
 class ProjectViewSet(GetViewSet, CreateWithUserViewSet, ModelViewSet):
     '''Project ViewSet that includes: get, retrieve, create, update, delete and Defect-Dojo features.'''
@@ -64,9 +65,11 @@ class ProjectViewSet(GetViewSet, CreateWithUserViewSet, ModelViewSet):
         '''
         project = self.get_object()
         member = get_object_or_404(project.members, pk=member_id)               # Get member from project members
+        membership = ProjectMembership.objects.get(project=project, user=member)
         if int(member_id) != project.owner.id:
             # Member found and it isn't the project owner
             project.members.remove(member)                                      # Remove project member
+            membership.delete()                                                 # Delete project membership
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -114,3 +117,30 @@ class ProjectViewSet(GetViewSet, CreateWithUserViewSet, ModelViewSet):
                 # Defect-Dojo integration is not configured
                 return Response(ex.args[0], status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+    @action(detail=True, methods=['GET'], url_path='member/role', url_name='get_role_by_user')
+    def get_user_role(self, request: Request, pk: str) -> Response:
+        '''Get the role of a specific user in the project.
+
+        Args:
+            request (Request): Received HTTP request
+            pk (str): Project ID
+            user_id (str): User ID
+
+        Returns:
+            Response: HTTP Response containing the user's role or error message
+        '''
+        project = self.get_object()
+        user = request.user
+        try:
+            membership = ProjectMembership.objects.get(project=project, user=user)
+            return Response(
+                {'role': membership.role},
+                status=status.HTTP_200_OK
+            )
+        except ProjectMembership.DoesNotExist:
+            return Response(
+                {'detail': f'User with ID {user_id} is not a member of this project.'},
+                status=status.HTTP_404_NOT_FOUND
+            )

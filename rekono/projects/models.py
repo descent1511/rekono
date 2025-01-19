@@ -43,3 +43,40 @@ class Project(models.Model):
             Any: Related project entity
         '''
         return self
+
+
+class ProjectMembership(models.Model):
+    '''Intermediate model for managing user roles within a project.'''
+
+    ROLE_CHOICES = [
+        ('admin', 'Admin'),
+        ('member', 'Member'),
+        ('operator', 'Operator'),
+    ]
+
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='memberships'
+    )  # Associated project
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='project_memberships'
+    )  # Associated user
+    role = models.CharField(
+        max_length=20,
+        choices=ROLE_CHOICES,
+        default='member'
+    )  # Role of the user in the project
+
+    class Meta:
+        unique_together = ('project', 'user')  # Ensure unique relationship between user and project
+
+    def __str__(self) -> str:
+        '''Instance representation in text format.
+
+        Returns:
+            str: String value that identifies this instance
+        '''
+        return f"{self.user.username} ({self.role}) in {self.project.name}"
