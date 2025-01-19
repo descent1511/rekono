@@ -19,7 +19,7 @@ COPY rekono/ /code
 COPY requirements.txt /code
 
 # Install backend dependencies
-RUN pip install -r /code/requirements.txt
+RUN pip install -r /code/requirements.txt --break-system-packages
 
 # Tools
 RUN apt install nmap dirsearch theharvester nikto sslscan sslyze cmseek zaproxy exploitdb metasploit-framework emailharvester joomscan gitleaks smbmap nuclei gobuster -y

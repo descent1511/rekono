@@ -20,7 +20,7 @@ COPY requirements.txt /code
 
 # Install backend dependencies
 RUN pip install --upgrade pip
-RUN pip install -r /code/requirements.txt
+RUN pip install -r /code/requirements.txt --break-system-packages
 
 # System user
 RUN adduser --disabled-password rekono
