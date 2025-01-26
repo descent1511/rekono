@@ -73,9 +73,9 @@ RUN wget https://archive.kali.org/archive-key.asc -O /etc/apt/trusted.gpg.d/kali
     git clone https://github.com/fullhunt/log4j-scan /opt/log4j-scan && \
     git clone https://github.com/fullhunt/spring4shell-scan.git /opt/spring4shell-scan && \
     git clone https://github.com/internetwache/GitTools.git /opt/GitTools && \
-    pip install -r /opt/log4j-scan/requirements.txt && \
-    pip install -r /opt/spring4shell-scan/requirements.txt && \
-    pip install emailfinder ssh-audit && \
+    pip install -r /opt/log4j-scan/requirements.txt --break-system-packages&& \
+    pip install -r /opt/spring4shell-scan/requirements.txt --break-system-packages&& \
+    pip install emailfinder ssh-audit --break-system-packages && \
     mkdir -p /home/kali
 
 # Migrate database
