@@ -32,6 +32,11 @@
             <p class="h5"><b-icon variant="success" icon="play-circle-fill"/></p>
           </b-button>
         </b-col>
+        <b-col>
+          <b-button variant="outline" v-b-tooltip.hover title="Download Report" @click="downloadReport" v-if="currentTask">
+            <p class="h5"><b-icon variant="primary" icon="file-earmark-arrow-down-fill" /></p>
+          </b-button>
+        </b-col>
       </b-row>
       <b-row class="ml-2 mr-2">
         <b-col>
@@ -68,7 +73,7 @@
               <template #title>
                 <b-icon icon="exclamation-triangle-fill"/> Error
               </template>
-              <b-form-textarea class="mt-3 text-light" style="background-color: #212529;" plaintext :value="selectedExecution.output_error" size="md" rows="5" max-rows="25"></b-form-textarea>
+              <b-form-textarea class="mt-3 text-light" style="background-colreor: #212529;" plaintext :value="selectedExecution.output_error" size="md" rows="5" max-rows="25"></b-form-textarea>
             </b-tab>
             <b-tab title-link-class="text-secondary" active :disabled="!currentTask || currentTask.status === 'Requested'">
               <template #title>
@@ -172,7 +177,47 @@ export default {
       if (items && items.length > 0) {
         this.selectedExecution = items[0]
       }
-    }
+    },
+    async downloadReport() {
+      if (!this.currentTask || !this.currentTask.id) {
+        this.$bvToast.toast('No task found to download the report.', {
+          title: 'Error',
+          variant: 'danger',
+          solid: true,
+        });
+        return;
+      }
+
+      try {
+        // Gửi yêu cầu tải báo cáo
+        const response = await this.get(`/api/tasks/${this.currentTask.id}/report/`, {});
+
+        // Tạo URL từ blob và kích hoạt tải xuống
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `${this.currentTask.target.target || 'report'}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        // Thông báo tải thành công
+        this.$bvToast.toast('Report downloaded successfully.', {
+          title: 'Success',
+          variant: 'success',
+          solid: true,
+        });
+      } catch (error) {
+        // Xử lý lỗi khi tải báo cáo
+        console.error('Error downloading report:', error);
+        this.$bvToast.toast('Error downloading the report.', {
+          title: 'Error',
+          variant: 'danger',
+          solid: true,
+        });
+      }
+    },
   },
   beforeRouteUpdate(to, from, next) {
     this.startAutoRefresh()
