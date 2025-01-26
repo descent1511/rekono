@@ -41,6 +41,7 @@ class Task(models.Model):
     start = models.DateTimeField(blank=True, null=True)                         # Task execution start date
     end = models.DateTimeField(blank=True, null=True)                           # Task execution end date
     wordlists = models.ManyToManyField(Wordlist, related_name='wordlists', blank=True)  # Wordlists applied
+    report = models.FileField(upload_to='reports/', blank=True, null=True)     # Report file
 
     def __str__(self) -> str:
         '''Instance representation in text format.
