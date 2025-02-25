@@ -94,103 +94,16 @@ class TaskViewSet(
 
     @extend_schema(request=None, responses={200: 'File'})
     @action(detail=True, methods=['GET'], url_path='report', url_name='report')
-    def get_report(self, request: Request, pk: str) -> Response:
-        '''
-        Retrieve the report of the task and its related executions.
-
-        Args:
-            request (Request): HTTP request
-            pk (str): Id of the task
-
-        Returns:
-            Response: File response with the report or an error message
-        '''
+    def get_report(self, request, pk):
         try:
-            # Lấy task dựa trên ID
             task = Task.objects.get(pk=pk)
         except Task.DoesNotExist:
-            logger.error("Task not found for ID: %s", pk)
             return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.error("Unexpected error when fetching task: %s", str(e))
-            return Response({'detail': f"Error fetching task: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Kiểm tra trạng thái của task
-        try:
-            if task.status in [Status.REQUESTED, Status.RUNNING]:
-                logger.warning("Task ID %s is still running", pk)
-                return Response('Execution is still running', status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error("Error checking task status for ID %s: %s", pk, str(e))
-            return Response({'detail': f"Error checking task status: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Lấy các Execution liên quan đến Task
-        try:
-            executions = task.executions.all()
-        except Exception as e:
-            logger.error("Error fetching executions for Task ID %s: %s", pk, str(e))
-            return Response({'detail': f"Error fetching executions: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Đường dẫn lưu báo cáo PDF
-        report_path = f'reports/{task.id}_executions_report.pdf'
         if not task.report:
-            try:
-                os.makedirs(os.path.dirname(report_path), exist_ok=True)
-            except Exception as e:
-                logger.error("Error creating directory for report file: %s", str(e))
-                return Response({'detail': f"Error creating directory: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            task.generate_report()
 
-            try:
-                # Tạo PDF chứa thông tin các Execution
-                c = canvas.Canvas(report_path)
-                c.drawString(100, 750, f"Execution Report for Task ID: {task.id}")
+        if not task.report:
+            return Response({'detail': 'Report not available'}, status=status.HTTP_404_NOT_FOUND)
 
-                # Vị trí để vẽ nội dung trong PDF
-                y = 700
-
-                # Tiêu đề bảng
-                c.drawString(100, y, "Execution ID")
-                c.drawString(200, y, "Tool Name")
-                c.drawString(400, y, "Status")
-                y -= 20
-
-                # Ghi dữ liệu từng Execution
-                for execution in executions:
-                    c.drawString(100, y, str(execution.id))
-                    c.drawString(200, y, execution.tool.name if execution.tool else "N/A")
-                    c.drawString(400, y, execution.status)
-                    y -= 20
-
-                    # Nếu hết chỗ trong trang, tạo trang mới
-                    if y < 50:
-                        c.showPage()
-                        c.setFont("Helvetica", 12)
-                        y = 750
-
-                # Lưu PDF
-                c.save()
-
-                # Lưu đường dẫn báo cáo vào task
-                task.report = report_path
-                task.save()
-            except Exception as e:
-                logger.error("Error creating or saving PDF for Task ID %s: %s", pk, str(e))
-                return Response({'detail': f"Error creating or saving PDF: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Đảm bảo file tồn tại trước khi trả về
-        try:
-            if not os.path.exists(report_path):
-                logger.error("Report file not found for Task ID %s", pk)
-                return Response({'detail': 'Report file not found'}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.error("Error checking existence of report file for Task ID %s: %s", pk, str(e))
-            return Response({'detail': f"Error checking report file existence: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        # Trả về file PDF
-        try:
-            response = FileResponse(open(report_path, 'rb'), content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(report_path)}"'
-            return response
-        except Exception as e:
-            logger.error("Error opening or returning report file for Task ID %s: %s", pk, str(e))
-            return Response({'detail': f"Error opening report file: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return FileResponse(task.report.open('rb'), content_type='application/pdf')

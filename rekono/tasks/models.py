@@ -2,17 +2,21 @@ from django.conf import settings
 from django.db import models
 from processes.models import Process
 from projects.models import Project
+from django.core.files import File
 from resources.models import Wordlist
 from security.input_validation import validate_time_amount
 from targets.models import Target
 from tools.enums import IntensityRank
 from tools.models import Configuration, Tool
-
+import logging
 from tasks.enums import Status, TimeUnit
+import os
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 # Create your models here.
 
-
+logger = logging.getLogger()  
 class Task(models.Model):
     '''Task model.'''
 
@@ -65,3 +69,77 @@ class Task(models.Model):
             Project: Related project entity
         '''
         return self.target.project
+
+
+    def generate_report(self):
+        '''Tạo báo cáo PDF sau khi quét xong'''
+        from findings.models import Vulnerability, Exploit, Port, Technology
+        if self.status == Status.RUNNING:
+            logger.warning(f"Task {self.id} is not completed yet. Cannot generate report.")
+            return
+
+        report_path = f'reports/{self.id}_report.pdf'
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+
+        try:
+            c = canvas.Canvas(report_path, pagesize=letter)
+            c.setFont("Helvetica", 12)
+            c.drawString(100, 750, f"Security Scan Report for Task ID: {self.id}")
+            c.drawString(100, 730, f"Target: {self.target.target}")
+
+            y = 700 
+
+            vulnerabilities = Vulnerability.objects.filter(port__host__address=self.target.target)
+            if vulnerabilities.exists():
+                c.drawString(100, y, "Discovered Vulnerabilities:")
+                y -= 20
+                for vul in vulnerabilities:
+                    c.drawString(120, y, f"- {vul.name} (Severity: {vul.severity})")
+                    if vul.cve:
+                        c.drawString(140, y - 15, f"CVE: {vul.cve}")
+                    y -= 30
+                    if y < 50:
+                        c.showPage()
+                        y = 750
+
+            exploits = Exploit.objects.filter(vulnerability__in=vulnerabilities)
+            if exploits.exists():
+                c.drawString(100, y, "Available Exploits:")
+                y -= 20
+                for exploit in exploits:
+                    c.drawString(120, y, f"- {exploit.title} (Ref: {exploit.reference})")
+                    y -= 20
+                    if y < 50:
+                        c.showPage()
+                        y = 750
+
+            ports = Port.objects.filter(host__address=self.target.target)
+            if ports.exists():
+                c.drawString(100, y, "Open Ports:")
+                y -= 20
+                for port in ports:
+                    c.drawString(120, y, f"- Port {port.port} ({port.status}) - {port.service or 'Unknown'}")
+                    y -= 20
+                    if y < 50:
+                        c.showPage()
+                        y = 750
+
+            technologies = Technology.objects.filter(port__host__address=self.target.target)
+            if technologies.exists():
+                c.drawString(100, y, "Identified Technologies:")
+                y -= 20
+                for tech in technologies:
+                    c.drawString(120, y, f"- {tech.name} (Version: {tech.version or 'Unknown'})")
+                    y -= 20
+                    if y < 50:
+                        c.showPage()
+                        y = 750
+
+            c.save()
+
+            with open(report_path, 'rb') as f:
+                self.report.save(f'{self.id}_report.pdf', File(f), save=True)
+
+            logger.info(f"Report generated for Task ID {self.id}")
+        except Exception as e:
+            logger.error(f"Error generating report for Task ID {self.id}: {e}")
