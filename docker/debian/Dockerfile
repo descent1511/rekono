@@ -1,48 +1,57 @@
 FROM debian:bookworm-20240423
 
-# Environment
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY YES
-ENV XDG_CONFIG_HOME /home/rekono/.config
-ENV DISPLAY :0.0
-ENV RKN_DB_HOST 127.0.0.1
-ENV RKN_DB_PORT 5432
-ENV RKN_DB_NAME rekono
-ENV RKN_DB_USER rekono
-ENV RKN_RQ_HOST 127.0.0.1
-ENV RKN_RQ_PORT 6379
-ENV REKONO_HOME /rekono
-ENV PGDATA /rekono/data
-ENV DJANGO_SUPERUSER_EMAIL rekono@rekono.com
-ENV DJANGO_SUPERUSER_USERNAME rekono
-ENV DJANGO_SUPERUSER_PASSWORD rekono
-ENV EXECUTION_WORKERS 5
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+ENV XDG_CONFIG_HOME=/home/rekono/.config
+ENV DISPLAY=:0.0
+ENV RKN_DB_HOST=127.0.0.1
+ENV RKN_DB_PORT=5432
+ENV RKN_DB_NAME=rekono
+ENV RKN_DB_USER=rekono
+ENV RKN_RQ_HOST=127.0.0.1
+ENV RKN_RQ_PORT=6379
+ENV REKONO_HOME=/rekono
+ENV PGDATA=/rekono/data
+ENV DJANGO_SUPERUSER_EMAIL=rekono@rekono.com
+ENV DJANGO_SUPERUSER_USERNAME=rekono
+ENV DJANGO_SUPERUSER_PASSWORD=rekono
+ENV EXECUTION_WORKERS=5
 ARG REKONO_VERSION
 
-# Install requirements
+# Install system dependencies (bao gồm python3-venv) và tạo các thư mục cần thiết
 RUN apt update && \
-    apt install python3-pip libpq-dev python3-dev libmagic1 redis-server firefox-esr sudo libgbm-dev libasound2 postgresql-15 wget libcap2-bin -y && \
-    ln -s /usr/bin/python3 /usr/bin/python && \
+    apt install -y python3.9 python3.9-pip python3.9-venv libpq-dev python3.9-dev libmagic1 redis-server firefox-esr sudo libgbm-dev libasound2 postgresql-15 wget libcap2-bin && \
+    ln -s /usr/bin/python3.9 /usr/bin/python && \
     mkdir -p $REKONO_HOME $PGDATA /code /config /kaboxer && \
     chown -R postgres:postgres /config && \
     echo $RANDOM | sha256sum | head -c 50 > /config/rkn_db_password.txt && \
     echo $REKONO_VERSION > /kaboxer/version && \
-    echo 1 > /kaboxer/packaging-revision
+    echo 1 > /kaboxer/packaging-revision && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Rekono
+
+# Tạo virtual environment và cập nhật PATH
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Cài đặt Rekono
 COPY rekono/ /code
 COPY requirements.txt /code
 COPY config.yaml /code
 COPY docker/debian/entrypoint.sh /entrypoint.sh
 COPY docker/debian/set_permissions.sh /set_permissions.sh
 COPY docker/debian/downgrade_postgresql_16.sh /downgrade_postgresql_16.sh
-RUN pip install --break-system-packages -r /code/requirements.txt && \
-    dpkg -i /code/frontend/dist_electron/rekono_*.deb || apt -f install -y && \
-    rm -R /code/frontend/ && \
-    rm -R /code/testing/
 
-# Initialize database
+# Cài đặt backend dependencies vào venv (không cần --break-system-packages nữa)
+RUN pip install --upgrade pip && \
+    pip install -r /code/requirements.txt && \
+    dpkg -i /code/frontend/dist_electron/rekono_*.deb || apt -f install -y && \
+    rm -rf /code/frontend/ && \
+    rm -rf /code/testing/
+
+# Initialize database (chạy dưới user postgres)
 USER postgres
 RUN export RKN_DB_PASSWORD=$(cat /config/rkn_db_password.txt) && \
     /etc/init.d/postgresql start && \
@@ -52,20 +61,17 @@ RUN export RKN_DB_PASSWORD=$(cat /config/rkn_db_password.txt) && \
     psql -c "CREATE DATABASE ${RKN_DB_NAME};" && \
     psql -c "GRANT ALL PRIVILEGES ON DATABASE ${RKN_DB_NAME} TO ${RKN_DB_USER};" && \
     psql ${RKN_DB_NAME} -c "GRANT ALL ON SCHEMA public TO ${RKN_DB_USER};" && \
-    psql ${RKN_DB_NAME} -c "GRANT ALL ON ALL TABLES IN SCHEMA public to ${RKN_DB_USER};" && \
-    psql ${RKN_DB_NAME} -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public to ${RKN_DB_USER};" && \
-    psql ${RKN_DB_NAME} -c "GRANT ALL ON ALL FUNCTIONS IN SCHEMA public to ${RKN_DB_USER};"
+    psql ${RKN_DB_NAME} -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO ${RKN_DB_USER};" && \
+    psql ${RKN_DB_NAME} -c "GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${RKN_DB_USER};" && \
+    psql ${RKN_DB_NAME} -c "GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO ${RKN_DB_USER};"
 
-# Tools
+# Tools: cài đặt các công cụ bổ trợ và dọn dẹp
 USER root
 RUN wget https://archive.kali.org/archive-key.asc -O /etc/apt/trusted.gpg.d/kali-archive-keyring.asc && \
     echo 'deb http://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware' >> /etc/apt/sources.list && \
     apt update && \
-    apt install nmap dirsearch theharvester nikto sslscan sslyze cmseek zaproxy exploitdb metasploit-framework emailharvester joomscan gitleaks smbmap nuclei gobuster -y && \
-    apt install seclists dirb -y && \
-    apt autoremove -y && \
-    apt autoclean -y && \
-    apt clean -y && \
+    apt install -y nmap dirsearch theharvester nikto sslscan sslyze cmseek zaproxy exploitdb metasploit-framework emailharvester joomscan gitleaks smbmap nuclei gobuster seclists dirb && \
+    apt autoremove -y && apt autoclean -y && apt clean -y && \
     rm -rf /var/lib/apt/lists/* && \
     sed -i '$ d' /etc/apt/sources.list && \
     rm /etc/apt/trusted.gpg.d/kali-archive-keyring.asc && \
@@ -73,9 +79,9 @@ RUN wget https://archive.kali.org/archive-key.asc -O /etc/apt/trusted.gpg.d/kali
     git clone https://github.com/fullhunt/log4j-scan /opt/log4j-scan && \
     git clone https://github.com/fullhunt/spring4shell-scan.git /opt/spring4shell-scan && \
     git clone https://github.com/internetwache/GitTools.git /opt/GitTools && \
-    pip install -r /opt/log4j-scan/requirements.txt --break-system-packages&& \
-    pip install -r /opt/spring4shell-scan/requirements.txt --break-system-packages&& \
-    pip install emailfinder ssh-audit --break-system-packages && \
+    pip install -r /opt/log4j-scan/requirements.txt && \
+    pip install -r /opt/spring4shell-scan/requirements.txt && \
+    pip install emailfinder ssh-audit && \
     mkdir -p /home/kali
 
 # Migrate database
@@ -84,19 +90,16 @@ RUN export RKN_DB_PASSWORD=$(cat /config/rkn_db_password.txt) && \
     python /code/manage.py migrate && \
     python /code/manage.py createsuperuser --no-input
 
-# System user
+# Thiết lập user hệ thống và phân quyền
 RUN adduser --disabled-password rekono && \
     usermod -a -G postgres rekono && \
     usermod -a -G postgres root && \
     touch $XDG_CONFIG_HOME && \
     chown rekono:rekono $XDG_CONFIG_HOME && \
-    chown rekono:rekono /entrypoint.sh && \
-    chmod 700 /entrypoint.sh && \
-    chown rekono:rekono /set_permissions.sh && \
-    chmod 700 /set_permissions.sh && \
+    chown rekono:rekono /entrypoint.sh && chmod 700 /entrypoint.sh && \
+    chown rekono:rekono /set_permissions.sh && chmod 700 /set_permissions.sh && \
     /set_permissions.sh && \
-    chown rekono:rekono /downgrade_postgresql_16.sh && \
-    chmod 700 /downgrade_postgresql_16.sh && \
+    chown rekono:rekono /downgrade_postgresql_16.sh && chmod 700 /downgrade_postgresql_16.sh && \
     chown -R rekono:rekono /code && \
     chown -R rekono:rekono /config && \
     chown -R rekono:rekono /opt && \

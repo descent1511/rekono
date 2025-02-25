@@ -6,6 +6,9 @@ ENV PYTHONUNBUFFERED 1
 ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY YES
 ENV REKONO_HOME /rekono
 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 # Install requirements
 RUN apk update && apk add curl postgresql-dev gcc python3-dev musl-dev libmagic --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
 
@@ -20,7 +23,7 @@ COPY requirements.txt /code
 
 # Install backend dependencies
 RUN pip install --upgrade pip
-RUN pip install -r /code/requirements.txt --break-system-packages
+RUN pip install -r /code/requirements.txt 
 
 # System user
 RUN adduser --disabled-password rekono

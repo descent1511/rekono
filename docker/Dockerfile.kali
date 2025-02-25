@@ -1,48 +1,89 @@
+# Base Image
 FROM kalilinux/kali-last-release
 
-# Environment
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY YES
+# Environment Variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES \
+    PATH="/opt/venv/bin:$PATH"
 
-# Install requirements
-RUN apt update -y && apt upgrade -y && apt dist-upgrade -y && apt install python3-pip libpq-dev python3-dev libmagic1 libcap2-bin -y
-RUN ln -s /usr/bin/python3 /usr/bin/python
+# Cập nhật hệ thống và cài đặt các gói phụ thuộc cần thiết
+RUN apt update -y && \
+    apt install -y \
+    wget \
+    build-essential \
+    libssl-dev \
+    zlib1g-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libgdbm-dev \
+    libdb5.3-dev \
+    libbz2-dev \
+    libexpat1-dev \
+    liblzma-dev \
+    tk-dev \
+    libffi-dev \
+    libpq-dev \
+    libmagic1 \
+    libcap2-bin \
+    nmap \
+    dirsearch \
+    theharvester \
+    nikto \
+    sslscan \
+    sslyze \
+    cmseek \
+    zaproxy \
+    exploitdb \
+    metasploit-framework \
+    emailharvester \
+    joomscan \
+    gitleaks \
+    smbmap \
+    nuclei \
+    gobuster \
+    seclists \
+    dirb && \
+    apt upgrade -y && apt dist-upgrade -y && \
+    setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
 
-# Home
-RUN mkdir /rekono
+# Tải xuống và cài đặt Python 3.9 từ mã nguồn
+RUN wget https://www.python.org/ftp/python/3.9.0/Python-3.9.0.tgz && \
+    tar -xvf Python-3.9.0.tgz && \
+    cd Python-3.9.0 && \
+    ./configure --enable-optimizations && \
+    make -j$(nproc) && \
+    make altinstall && \
+    cd .. && \
+    rm -rf Python-3.9.0 Python-3.9.0.tgz
+
+# Thiết lập môi trường ảo (virtual environment)
+RUN python3.9 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip
+
+# Tạo thư mục và sao chép các tệp cấu hình
+RUN mkdir -p /rekono /code
 COPY config.yaml /rekono
-
-# Source code
-RUN mkdir /code
 COPY rekono/ /code
 COPY requirements.txt /code
 
-# Install backend dependencies
-RUN pip install -r /code/requirements.txt --break-system-packages
+# Cài đặt các phụ thuộc Python
+RUN /opt/venv/bin/pip install -r /code/requirements.txt
 
-# Tools
-RUN apt install nmap dirsearch theharvester nikto sslscan sslyze cmseek zaproxy exploitdb metasploit-framework emailharvester joomscan gitleaks smbmap nuclei gobuster -y
-RUN setcap cap_net_raw,cap_net_admin,cap_net_bind_service+eip $(which nmap)
-RUN git clone https://github.com/fullhunt/log4j-scan /opt/log4j-scan
-RUN git clone https://github.com/fullhunt/spring4shell-scan.git /opt/spring4shell-scan
-RUN git clone https://github.com/internetwache/GitTools.git /opt/GitTools
-RUN pip install -r /opt/log4j-scan/requirements.txt
-RUN pip install -r /opt/spring4shell-scan/requirements.txt
-RUN pip install emailfinder ssh-audit
+# Cài đặt các công cụ bảo mật bổ sung
+RUN git clone https://github.com/fullhunt/log4j-scan /opt/log4j-scan && \
+    git clone https://github.com/fullhunt/spring4shell-scan.git /opt/spring4shell-scan && \
+    git clone https://github.com/internetwache/GitTools.git /opt/GitTools && \
+    /opt/venv/bin/pip install -r /opt/log4j-scan/requirements.txt && \
+    /opt/venv/bin/pip install -r /opt/spring4shell-scan/requirements.txt && \
+    /opt/venv/bin/pip install emailfinder ssh-audit
 
-# Wordlists
-RUN apt install seclists dirb -y
+# Tạo người dùng và thiết lập quyền
+RUN adduser --disabled-password --gecos "" rekono && \
+    chown -R rekono:rekono /code /rekono /opt /usr/share/seclists /usr/share/dirb/wordlists
 
-# System user
-RUN adduser --disabled-password rekono
-RUN chown -R rekono:rekono /code
-RUN chown -R rekono:rekono /rekono
-RUN chown -R rekono:rekono /usr/share/cmseek
-RUN chown -R rekono:rekono /opt/
-RUN chown -R rekono:rekono /usr/share/seclists/
-RUN chown -R rekono:rekono /usr/share/dirb/wordlists/
-
-# Final system configuration
+# Chuyển sang người dùng không phải root
 USER rekono
 WORKDIR /code
