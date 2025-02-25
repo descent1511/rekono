@@ -21,3 +21,4 @@ stringcase==1.2.0
 tornado==6.3.2
 reportlab
 python-decouple
+psycopg2-binary
