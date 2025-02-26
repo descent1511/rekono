@@ -78,9 +78,9 @@ REPORTS_DIR = os.path.join(REKONO_HOME, 'reports')                              
 WORDLIST_DIR = os.path.join(REKONO_HOME, 'wordlists')                           # Directory to save wordlist files
 LOGGING_DIR = os.path.join(REKONO_HOME, 'logs')                                 # Directory to save log files
 
-for dir in [REPORTS_DIR, WORDLIST_DIR, LOGGING_DIR]:                            # Initialize directories if needed
-    if not os.path.isdir(dir):
-        os.mkdir(dir)
+for dir in [REPORTS_DIR, WORDLIST_DIR, LOGGING_DIR]:  # Initialize directories if needed
+    os.makedirs(dir, exist_ok=True)  # Ensure directories exist without raising errors
+
 
 CONFIG_FILE = ''                                                                # Config file
 for filename in ['config.yaml', 'config.yml', 'rekono.yaml', 'rekono.yml']:     # For each config filename
